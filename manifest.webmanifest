@@ -1,1 +1,1 @@
-{"name":"プロタッチ調色管理","short_name":"調色管理","start_url":"./index.html","display":"standalone","background_color":"#f2f5f7","theme_color":"#142c3d","lang":"ja","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{"name":"えりーと調色","short_name":"えりーと調色","start_url":"./","scope":"./","display":"standalone","background_color":"#f3f6f8","theme_color":"#102c42","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
