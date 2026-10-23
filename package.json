@@ -1,0 +1,6 @@
+{
+  "name": "elite-choshoku",
+  "private": true,
+  "scripts": {"test": "node --test share-link.test.cjs"},
+  "devDependencies": {"jsdom": "^27.0.0"}
+}

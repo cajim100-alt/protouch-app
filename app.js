@@ -74,7 +74,7 @@ function validateRecipe(r,maxRows=80){
  return r;
 }
 function encodeRecipe(rec){const data={...rec,v:2};delete data.id;delete data.updated;const bytes=new TextEncoder().encode(JSON.stringify(data));let binary='';for(const b of bytes)binary+=String.fromCharCode(b);return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
-function decodeRecipe(encoded){if(!encoded||encoded.length>32000)throw Error('リンクのデータが大きすぎます');const binary=atob(encoded.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-encoded.length%4)%4));const data=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(binary,c=>c.charCodeAt(0))));if(![1,2].includes(data.v))throw Error('レシピの形式が違います');return validateRecipe(data)}
+function decodeRecipe(encoded){if(!encoded||encoded.length>32000)throw Error('リンクのデータが空か、大きすぎます');const binary=atob(encoded.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-encoded.length%4)%4));const data=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(binary,c=>c.charCodeAt(0))));if(!data||typeof data!=='object'||Array.isArray(data)||![undefined,1,2].includes(data.v))throw Error('対応していないレシピ形式です');return validateRecipe(data)}
 // Export as a real file. iOS PWA supports native share sheet when available.
 function backupPayload(){return JSON.stringify({app:'protouch-v02',formatVersion:3,exported:new Date().toISOString(),records},null,2)}
 $('export').addEventListener('click',async()=>{
@@ -127,9 +127,23 @@ async function shareRecipe(id){
  catch(e){prompt('このリンクをコピーしてLINEで送ってください',link)}
 }
 
-function receiveFromLink(){const match=location.hash.match(/^#recipe=(.+)$/);if(!match)return;try{const r=decodeRecipe(match[1]);receivedRecipe=r;$('receivedDetails').innerHTML=`<p><strong>${escapeHTML([r.maker,r.model,r.code,r.vehicleType].filter(Boolean).join(' / ')||'名称未設定')}</strong></p><p class="hint">同色コード：${escapeHTML(aliasesText(r))}</p>${recipeDetails(r)}<p class="hint">${escapeHTML(r.memo||'')}</p>`;$('received').hidden=false;setTimeout(()=>$('received').scrollIntoView({behavior:'smooth',block:'start'}),150)}catch(e){alert('共有リンクを読み込めませんでした：'+e.message)}}
+function receiveFromLink(){
+ const fragment=location.hash.slice(1);
+ if(!fragment.startsWith('recipe='))return;
+ const card=$('received');card.hidden=false;document.body.classList.add('shared-preview');receivedRecipe=null;$('receiveSave').disabled=true;
+ try{
+  // Some clients percent-encode the fragment. Decode only this payload, not the URL.
+  const r=decodeRecipe(decodeURIComponent(fragment.slice(7)));receivedRecipe=r;
+  $('receivedDetails').innerHTML=`<p><strong>${escapeHTML([r.maker,r.model,r.code,r.vehicleType].filter(Boolean).join(' / ')||'名称未設定')}</strong></p>${aliasesText(r)?`<p class="hint">同色コード：${escapeHTML(aliasesText(r))}</p>`:''}${recipeDetails(r)}${r.memo?`<p class="hint">メモ：${escapeHTML(r.memo)}</p>`:''}`;
+  $('receiveSave').disabled=false;
+ }catch(e){$('receivedDetails').innerHTML='<p role="alert">共有リンクを読み込めませんでした。<br>'+escapeHTML(e.message)+'<br>送信者にリンクをもう一度共有してもらってください。</p>'}
+ window.scrollTo({top:0,behavior:'instant'});
+}
 $('receiveSave').addEventListener('click',()=>{if(!receivedRecipe)return;const r=receivedRecipe;if(records.some(x=>x.maker===r.maker&&x.model===r.model&&x.code===r.code&&JSON.stringify(recipeLayers(x))===JSON.stringify(recipeLayers(r)))&&!confirm('同じ配合が保存されている可能性があります。追加で保存しますか？'))return;const rec={...structuredClone(r),id:uid(),updated:new Date().toISOString()};delete rec.v;records.unshift(rec);if(persist()){renderSaved();alert('自分の配合に保存しました！');dismissReceived()}else records.shift()});
-function dismissReceived(){receivedRecipe=null;$('received').hidden=true;history.replaceState(null,'',location.pathname+location.search)}
-$('receiveDismiss').addEventListener('click',dismissReceived);window.addEventListener('hashchange',receiveFromLink);
-read();reset();renderSaved();receiveFromLink();if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
+function dismissReceived(){receivedRecipe=null;$('received').hidden=true;document.body.classList.remove('shared-preview');history.replaceState(null,'',location.pathname+location.search)}
+$('receiveDismiss').addEventListener('click',dismissReceived);
+window.addEventListener('hashchange',()=>{if(location.hash.startsWith('#recipe='))receiveFromLink();else{receivedRecipe=null;$('received').hidden=true;document.body.classList.remove('shared-preview')}});
+window.addEventListener('pageshow',receiveFromLink);
+// Render incoming links before touching local data: a broken saved list must not block receipt.
+receiveFromLink();read();reset();try{renderSaved()}catch{$('saved').textContent='保存一覧を表示できませんでした。元の保存データは変更していません。バックアップを確認してください。'}if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
 
