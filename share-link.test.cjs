@@ -46,3 +46,21 @@ test('a broken saved list cannot block the incoming recipe',()=>{
 test('old backups validate and shared URL text is escaped',()=>{
  const {dom,w,$}=open('#recipe='+encode({...recipe,memo:'<img src=x onerror=alert(1)>'}));assert.equal($('receivedDetails').querySelector('img'),null);w.backup={app:'protouch-v02',records:[{...recipe,id:'old'}]};assert.equal(w.eval('validateBackup(backup).length'),1);dom.window.close();
 });
+test('newly shared LINE URL uses one compact query link, with all layers and metadata intact',async()=>{
+ const {dom,w,$}=open('',[{...recipe,id:'send',aliases:[{maker:'三菱',code:'KBV'}]}]);let shared;
+ w.navigator.share=async value=>{shared=value};await w.eval('shareRecipe("send")');
+ assert.ok(shared.url.includes('?r='));assert.equal(new URL(shared.url).hash,'');assert.equal(shared.text,undefined);
+ assert.ok(shared.url.length<('https://example.com/protouch-app/#recipe='+encode({...recipe,aliases:[{maker:'三菱',code:'KBV'}]})).length);
+ const receiver=open(new URL(shared.url).search);assert.equal(receiver.$('receiveSave').disabled,false);assert.ok(receiver.$('receivedDetails').textContent.includes('KBV'));receiver.dom.window.close();dom.window.close();
+});
+test('query and compact three-coat links work on initial load and close without dropping other parameters',()=>{
+ const three={...recipe,paintType:'threeCoat',aliases:[{maker:'三菱',code:'KBV'}],layers:{base:{base:25,rows:recipe.rows},pearl:{base:50,rows:[{...recipe.rows[0],pigment:'100',linked:false}]}}};
+ const sender=open();sender.w.r=three;const packed=sender.w.eval('encodeRecipe(r)');sender.dom.window.close();
+ const {dom,w,$}=open('?keep=yes&r='+packed);assert.equal($('receiveSave').disabled,false);assert.ok($('receivedDetails').textContent.includes('② パール配合'));assert.equal(w.eval('receivedRecipe.layers.pearl.rows[0].linked'),false);
+ $('receiveDismiss').click();assert.equal(w.location.search,'?keep=yes');assert.equal($('received').hidden,true);dom.window.close();
+});
+test('truncated LINE hash has recovery UI, and pasted old multi-line message restores the complete recipe',()=>{
+ const {dom,w,$}=open('#recipe');assert.equal($('receiveSave').disabled,true);assert.ok($('receivedDetails').querySelector('[role="alert"]'));
+ const payload=encode(recipe);$('shareInput').value='調色レシピを共有します。\nhttps://example.com/protouch-app/\n#recipe='+payload.slice(0,30)+'\n'+payload.slice(30);$('shareOpen').click();
+ assert.equal($('receiveSave').disabled,false);assert.ok($('receivedDetails').textContent.includes('KBY'));assert.ok(w.location.search.startsWith('?r='));assert.equal(w.localStorage.getItem('protouch_v02_records'),'[]');dom.window.close();
+});
